@@ -635,67 +635,75 @@ module.exports = {
                 const archCollector = archiveReply.createMessageComponentCollector({ time: 300000 });
                 
                 archCollector.on('collect', async (archI) => {
-                    if (archI.customId === 'arch_prev' && archiveIndex > 0) {
-                        archiveIndex--;
-                    } else if (archI.customId === 'arch_next' && archiveIndex < archived.length - 1) {
-                        archiveIndex++;
-                    } else if (archI.customId === 'arch_restore') {
-                        const archiveId = archived[archiveIndex].id;
-                        const result = restoreSubmission(archiveId);
-                        if (result) {
-                            submissions = getAllPendingSubmissions();
+                    try {
+                        if (archI.customId === 'arch_prev' && archiveIndex > 0) {
+                            archiveIndex--;
+                        } else if (archI.customId === 'arch_next' && archiveIndex < archived.length - 1) {
+                            archiveIndex++;
+                        } else if (archI.customId === 'arch_restore') {
+                            const archiveId = archived[archiveIndex].id;
+                            const result = restoreSubmission(archiveId);
+                            if (result) {
+                                submissions = getAllPendingSubmissions();
+                                await archI.update({
+                                    content: `♻️ **Restored!** Submission from **${result.username}** has been restored with new ID: **${result.newId}**`,
+                                    embeds: [],
+                                    files: [],
+                                    components: []
+                                });
+                                return;
+                            }
+                        } else if (archI.customId === 'arch_delete_permanent') {
+                            const archiveId = archived[archiveIndex].id;
+                            const deletedUsername = archived[archiveIndex].username;
+                            deleteFromArchive(archiveId);
+                            
+                            // Refresh archived list from database
+                            const newArchived = getArchivedSubmissions();
+                            archived.length = 0;
+                            newArchived.forEach(a => archived.push(a));
+                            
+                            if (archived.length === 0) {
+                                await archI.update({
+                                    content: `🗑️ **Permanently deleted!** Submission from **${deletedUsername}** removed. Archive is now empty.`,
+                                    embeds: [],
+                                    files: [],
+                                    components: []
+                                });
+                                return;
+                            }
+                            
+                            if (archiveIndex >= archived.length) {
+                                archiveIndex = archived.length - 1;
+                            }
+                            
+                            const { embed: delEmbed, files: delFiles } = generateArchiveEmbed(archiveIndex);
                             await archI.update({
-                                content: `♻️ **Restored!** Submission from **${result.username}** has been restored with new ID: **${result.newId}**`,
+                                content: `🗑️ **Permanently deleted!** Submission from **${deletedUsername}** has been removed forever.`,
+                                embeds: [delEmbed],
+                                files: delFiles,
+                                components: generateArchiveButtons(archiveIndex)
+                            });
+                            return;
+                        } else if (archI.customId === 'arch_close') {
+                            await archI.update({
+                                content: '📦 Archive closed.',
                                 embeds: [],
                                 files: [],
                                 components: []
                             });
                             return;
                         }
-                    } else if (archI.customId === 'arch_delete_permanent') {
-                        const archiveId = archived[archiveIndex].id;
-                        const deletedUsername = archived[archiveIndex].username;
-                        deleteFromArchive(archiveId);
-                        archived.splice(archiveIndex, 1);
-                        
-                        if (archived.length === 0) {
-                            await archI.update({
-                                content: '🗑️ **Permanently deleted!** Archive is now empty.',
-                                embeds: [],
-                                files: [],
-                                components: []
-                            });
-                            return;
-                        }
-                        
-                        if (archiveIndex >= archived.length) {
-                            archiveIndex = archived.length - 1;
-                        }
-                        
-                        const { embed: delEmbed, files: delFiles } = generateArchiveEmbed(archiveIndex);
+
+                        const { embed: newArchEmbed, files: newArchFiles } = generateArchiveEmbed(archiveIndex);
                         await archI.update({
-                            content: `🗑️ **Permanently deleted!** Submission from **${deletedUsername}** has been removed forever.`,
-                            embeds: [delEmbed],
-                            files: delFiles,
+                            embeds: [newArchEmbed],
+                            files: newArchFiles,
                             components: generateArchiveButtons(archiveIndex)
                         });
-                        return;
-                    } else if (archI.customId === 'arch_close') {
-                        await archI.update({
-                            content: '📦 Archive closed.',
-                            embeds: [],
-                            files: [],
-                            components: []
-                        });
-                        return;
+                    } catch (err) {
+                        console.error('Archive interaction error:', err);
                     }
-
-                    const { embed: newArchEmbed, files: newArchFiles } = generateArchiveEmbed(archiveIndex);
-                    await archI.update({
-                        embeds: [newArchEmbed],
-                        files: newArchFiles,
-                        components: generateArchiveButtons(archiveIndex)
-                    });
                 });
 
                 return;
