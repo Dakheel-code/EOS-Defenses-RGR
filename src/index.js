@@ -163,14 +163,20 @@ client.on('messageCreate', async (message) => {
                         fields: [
                             { name: '🆔 ID', value: `${result.lastInsertRowid}`, inline: true },
                             { name: '👤 Player', value: `<@${message.author.id}>`, inline: true },
-                            { name: '📛 Username', value: message.author.username, inline: true },
-                            { name: '📝 Code Preview', value: `\`${content.substring(0, 100)}${content.length > 100 ? '...' : ''}\``, inline: false }
+                            { name: '📛 Username', value: message.author.username, inline: true }
                         ],
                         thumbnail: { url: attachment.url },
                         timestamp: new Date().toISOString(),
                         footer: { text: 'Use /list to manage submissions' }
                     };
-                    await adminChannel.send({ embeds: [notificationEmbed] });
+                    const notifMessage = await adminChannel.send({ embeds: [notificationEmbed] });
+                    
+                    // Create thread with full code
+                    const thread = await notifMessage.startThread({
+                        name: `Code - ${message.author.username}`,
+                        autoArchiveDuration: 1440
+                    });
+                    await thread.send(`\`\`\`\n${content}\n\`\`\``);
                 }
             } catch (notifError) {
                 console.error('Error sending admin notification:', notifError);
