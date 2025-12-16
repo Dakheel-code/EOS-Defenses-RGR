@@ -199,6 +199,14 @@ function restoreSubmission(archiveId) {
     return { newId: newId[0].values[0][0], username: archived.username };
 }
 
+// Permanently delete from archive
+function deleteFromArchive(archiveId) {
+    const d = getDb();
+    d.run('DELETE FROM archive WHERE id = ?', [archiveId]);
+    saveDatabase();
+    return { changes: d.getRowsModified() };
+}
+
 module.exports = {
     initDatabase,
     addSubmission,
@@ -209,5 +217,6 @@ module.exports = {
     deleteSubmission,
     markAsPublished,
     getArchivedSubmissions,
-    restoreSubmission
+    restoreSubmission,
+    deleteFromArchive
 };

@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits, AttachmentBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
-const { getAllPendingSubmissions, deleteSubmission, updateSubmission, updateSubmissionMessage, markAsPublished, getArchivedSubmissions, restoreSubmission } = require('../database');
+const { getAllPendingSubmissions, deleteSubmission, updateSubmission, updateSubmissionMessage, markAsPublished, getArchivedSubmissions, restoreSubmission, deleteFromArchive } = require('../database');
 
 const getIntroMessage = (season) => `@everyone
 
@@ -613,9 +613,13 @@ module.exports = {
                                 .setLabel('♻️ Restore')
                                 .setStyle(ButtonStyle.Success),
                             new ButtonBuilder()
+                                .setCustomId('arch_delete_permanent')
+                                .setLabel('🗑️ Delete Forever')
+                                .setStyle(ButtonStyle.Danger),
+                            new ButtonBuilder()
                                 .setCustomId('arch_close')
                                 .setLabel('❌ Close')
-                                .setStyle(ButtonStyle.Danger)
+                                .setStyle(ButtonStyle.Secondary)
                         )
                     ];
                 };
@@ -648,6 +652,34 @@ module.exports = {
                             });
                             return;
                         }
+                    } else if (archI.customId === 'arch_delete_permanent') {
+                        const archiveId = archived[archiveIndex].id;
+                        const deletedUsername = archived[archiveIndex].username;
+                        deleteFromArchive(archiveId);
+                        archived.splice(archiveIndex, 1);
+                        
+                        if (archived.length === 0) {
+                            await archI.update({
+                                content: '🗑️ **Permanently deleted!** Archive is now empty.',
+                                embeds: [],
+                                files: [],
+                                components: []
+                            });
+                            return;
+                        }
+                        
+                        if (archiveIndex >= archived.length) {
+                            archiveIndex = archived.length - 1;
+                        }
+                        
+                        const { embed: delEmbed, files: delFiles } = generateArchiveEmbed(archiveIndex);
+                        await archI.update({
+                            content: `🗑️ **Permanently deleted!** Submission from **${deletedUsername}** has been removed forever.`,
+                            embeds: [delEmbed],
+                            files: delFiles,
+                            components: generateArchiveButtons(archiveIndex)
+                        });
+                        return;
                     } else if (archI.customId === 'arch_close') {
                         await archI.update({
                             content: '📦 Archive closed.',
