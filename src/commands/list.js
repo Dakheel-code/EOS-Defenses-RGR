@@ -20,18 +20,22 @@ module.exports = {
     async execute(interaction) {
         let submissions = getAllPendingSubmissions();
 
-        if (submissions.length === 0) {
-            return interaction.reply({
-                content: '📭 No pending submissions.',
-                ephemeral: true
-            });
-        }
-
         let currentIndex = 0;
         let showFullCode = false;
         let seasonNumber = '158'; // Default season
 
         const generateMessage = (index, fullCode = false) => {
+            // If no submissions, show empty state
+            if (submissions.length === 0) {
+                const embed = {
+                    color: 0x808080,
+                    title: '📭 No Pending Submissions',
+                    description: 'There are no submissions waiting to be published.\n\nPlayers can send their defenses via DM to the bot.',
+                    timestamp: new Date().toISOString()
+                };
+                return { embed, files: [], subId: null, code: null };
+            }
+
             const sub = submissions[index];
             const files = [];
             
@@ -66,36 +70,46 @@ module.exports = {
         };
 
         const generateButtons = (index, fullCode = false) => {
+            const hasSubmissions = submissions.length > 0;
+
             const navRow = new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
                     .setCustomId('list_prev')
                     .setLabel('◀️ Previous')
                     .setStyle(ButtonStyle.Secondary)
-                    .setDisabled(index === 0),
+                    .setDisabled(!hasSubmissions || index === 0),
                 new ButtonBuilder()
                     .setCustomId('list_next')
                     .setLabel('Next ▶️')
                     .setStyle(ButtonStyle.Secondary)
-                    .setDisabled(index === submissions.length - 1),
+                    .setDisabled(!hasSubmissions || index === submissions.length - 1),
                 new ButtonBuilder()
                     .setCustomId('toggle_code')
                     .setLabel(fullCode ? '🔽 Hide Code' : '🔼 Show Full Code')
                     .setStyle(ButtonStyle.Primary)
+                    .setDisabled(!hasSubmissions),
+                new ButtonBuilder()
+                    .setCustomId('refresh_list')
+                    .setLabel('🔄 Refresh')
+                    .setStyle(ButtonStyle.Secondary)
             );
 
             const actionRow = new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
                     .setCustomId('edit_message')
                     .setLabel('✏️ Edit Message')
-                    .setStyle(ButtonStyle.Primary),
+                    .setStyle(ButtonStyle.Primary)
+                    .setDisabled(!hasSubmissions),
                 new ButtonBuilder()
                     .setCustomId('edit_code')
                     .setLabel('📝 Edit Code')
-                    .setStyle(ButtonStyle.Secondary),
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(!hasSubmissions),
                 new ButtonBuilder()
                     .setCustomId('delete_current')
                     .setLabel('🗑️ Delete')
-                    .setStyle(ButtonStyle.Danger),
+                    .setStyle(ButtonStyle.Danger)
+                    .setDisabled(!hasSubmissions),
                 new ButtonBuilder()
                     .setCustomId('set_season')
                     .setLabel(`🏆 S${seasonNumber}`)
@@ -106,11 +120,13 @@ module.exports = {
                 new ButtonBuilder()
                     .setCustomId('publish_all')
                     .setLabel('📤 Publish All')
-                    .setStyle(ButtonStyle.Success),
+                    .setStyle(ButtonStyle.Success)
+                    .setDisabled(!hasSubmissions),
                 new ButtonBuilder()
                     .setCustomId('schedule_menu')
                     .setLabel('⏰ Schedule')
-                    .setStyle(ButtonStyle.Secondary),
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(!hasSubmissions),
                 new ButtonBuilder()
                     .setCustomId('view_archive')
                     .setLabel('📦 Archive')
@@ -651,6 +667,13 @@ module.exports = {
                 });
 
                 return;
+            }
+
+            // Refresh list
+            if (i.customId === 'refresh_list') {
+                submissions = getAllPendingSubmissions();
+                currentIndex = 0;
+                showFullCode = false;
             }
 
             const { embed, files } = generateMessage(currentIndex, showFullCode);
