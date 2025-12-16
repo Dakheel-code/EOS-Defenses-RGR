@@ -157,6 +157,11 @@ client.on('messageCreate', async (message) => {
             try {
                 const adminChannel = client.channels.cache.get(process.env.ADMIN_CHANNEL_ID);
                 if (adminChannel) {
+                    const { AttachmentBuilder } = require('discord.js');
+                    
+                    // Create attachment for the main message
+                    const imageAttachment = new AttachmentBuilder(imageData, { name: attachment.name || 'image.png' });
+                    
                     const notificationEmbed = {
                         color: 0x00ff00,
                         title: '📥 New Submission Received!',
@@ -165,17 +170,26 @@ client.on('messageCreate', async (message) => {
                             { name: '👤 Player', value: `<@${message.author.id}>`, inline: true },
                             { name: '📛 Username', value: message.author.username, inline: true }
                         ],
-                        thumbnail: { url: attachment.url },
+                        image: { url: `attachment://${attachment.name || 'image.png'}` },
                         timestamp: new Date().toISOString(),
                         footer: { text: 'Use /list to manage submissions' }
                     };
-                    const notifMessage = await adminChannel.send({ embeds: [notificationEmbed] });
+                    const notifMessage = await adminChannel.send({ 
+                        embeds: [notificationEmbed],
+                        files: [imageAttachment]
+                    });
                     
-                    // Create thread with full code
+                    // Create thread with full code and image
                     const thread = await notifMessage.startThread({
                         name: `Code - ${message.author.username}`,
                         autoArchiveDuration: 1440
                     });
+                    
+                    // Send image in thread
+                    const threadImageAttachment = new AttachmentBuilder(imageData, { name: attachment.name || 'image.png' });
+                    await thread.send({ files: [threadImageAttachment] });
+                    
+                    // Send code in thread
                     await thread.send(`\`\`\`\n${content}\n\`\`\``);
                 }
             } catch (notifError) {
