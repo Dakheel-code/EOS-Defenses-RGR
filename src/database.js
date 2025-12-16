@@ -35,6 +35,24 @@ async function initDatabase() {
         )
     `);
     
+    // Archive table for deleted/published submissions (max 100)
+    db.run(`
+        CREATE TABLE IF NOT EXISTS archive (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            original_id INTEGER,
+            user_id TEXT NOT NULL,
+            username TEXT NOT NULL,
+            code TEXT NOT NULL,
+            message TEXT DEFAULT '',
+            extra_mention TEXT DEFAULT '',
+            image_data BLOB,
+            image_filename TEXT,
+            created_at TEXT,
+            archived_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            archive_reason TEXT DEFAULT 'deleted'
+        )
+    `);
+    
     // Add columns if they don't exist (for existing databases)
     try {
         db.run('ALTER TABLE submissions ADD COLUMN message TEXT DEFAULT ""');
@@ -112,8 +130,30 @@ function updateSubmissionMessage(id, message, extraMention = '') {
     return { changes: d.getRowsModified() };
 }
 
+// Archive a submission (keeps max 100)
+function archiveSubmission(id, reason) {
+    const d = getDb();
+    const sub = getSubmissionById(id);
+    if (!sub) return;
+    
+    d.run(`
+        INSERT INTO archive (original_id, user_id, username, code, message, extra_mention, image_data, image_filename, created_at, archive_reason)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [sub.id, sub.user_id, sub.username, sub.code, sub.message || '', sub.extra_mention || '', sub.image_data, sub.image_filename, sub.created_at, reason]);
+    
+    // Keep only last 100 archived submissions
+    d.run(`
+        DELETE FROM archive WHERE id NOT IN (
+            SELECT id FROM archive ORDER BY archived_at DESC LIMIT 100
+        )
+    `);
+    saveDatabase();
+}
+
 function deleteSubmission(id) {
     const d = getDb();
+    // Archive before deleting
+    archiveSubmission(id, 'deleted');
     d.run('DELETE FROM submissions WHERE id = ?', [id]);
     saveDatabase();
     return { changes: d.getRowsModified() };
@@ -121,9 +161,42 @@ function deleteSubmission(id) {
 
 function markAsPublished(id) {
     const d = getDb();
+    // Archive before marking as published
+    archiveSubmission(id, 'published');
     d.run('UPDATE submissions SET published = 1 WHERE id = ?', [id]);
     saveDatabase();
     return { changes: d.getRowsModified() };
+}
+
+// Get all archived submissions
+function getArchivedSubmissions() {
+    const d = getDb();
+    const result = d.exec(`
+        SELECT * FROM archive 
+        ORDER BY archived_at DESC
+    `);
+    return resultToObjects(result);
+}
+
+// Restore a submission from archive
+function restoreSubmission(archiveId) {
+    const d = getDb();
+    const result = d.exec('SELECT * FROM archive WHERE id = ?', [archiveId]);
+    const rows = resultToObjects(result);
+    if (rows.length === 0) return null;
+    
+    const archived = rows[0];
+    d.run(`
+        INSERT INTO submissions (user_id, username, code, message, extra_mention, image_data, image_filename, created_at, published)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
+    `, [archived.user_id, archived.username, archived.code, archived.message || '', archived.extra_mention || '', archived.image_data, archived.image_filename, archived.created_at]);
+    
+    // Remove from archive after restoring
+    d.run('DELETE FROM archive WHERE id = ?', [archiveId]);
+    
+    const newId = d.exec('SELECT last_insert_rowid() as id');
+    saveDatabase();
+    return { newId: newId[0].values[0][0], username: archived.username };
 }
 
 module.exports = {
@@ -134,5 +207,7 @@ module.exports = {
     updateSubmission,
     updateSubmissionMessage,
     deleteSubmission,
-    markAsPublished
+    markAsPublished,
+    getArchivedSubmissions,
+    restoreSubmission
 };

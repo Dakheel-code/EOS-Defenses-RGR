@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits, AttachmentBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
-const { getAllPendingSubmissions, deleteSubmission, updateSubmission, updateSubmissionMessage, markAsPublished } = require('../database');
+const { getAllPendingSubmissions, deleteSubmission, updateSubmission, updateSubmissionMessage, markAsPublished, getArchivedSubmissions, restoreSubmission } = require('../database');
 
 const getIntroMessage = (season) => `@everyone
 
@@ -110,6 +110,10 @@ module.exports = {
                 new ButtonBuilder()
                     .setCustomId('schedule_menu')
                     .setLabel('⏰ Schedule')
+                    .setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder()
+                    .setCustomId('view_archive')
+                    .setLabel('📦 Archive')
                     .setStyle(ButtonStyle.Secondary)
             );
 
@@ -522,6 +526,130 @@ module.exports = {
                 } catch (err) {
                     // Modal timed out
                 }
+                return;
+            }
+
+            // View Archive
+            if (i.customId === 'view_archive') {
+                const archived = getArchivedSubmissions();
+                if (archived.length === 0) {
+                    await i.reply({
+                        content: '📦 Archive is empty. No deleted or published submissions yet.',
+                        ephemeral: true
+                    });
+                    return;
+                }
+
+                let archiveIndex = 0;
+
+                const generateArchiveEmbed = (index) => {
+                    const arch = archived[index];
+                    const files = [];
+                    const codePreview = arch.code.length > 100 
+                        ? `${arch.code.substring(0, 100)}...` 
+                        : arch.code;
+                    
+                    const reasonEmoji = arch.archive_reason === 'published' ? '✅' : '🗑️';
+                    const reasonText = arch.archive_reason === 'published' ? 'Published' : 'Deleted';
+                    
+                    const embed = {
+                        color: arch.archive_reason === 'published' ? 0x00ff00 : 0xff0000,
+                        title: `📦 Archive (${index + 1}/${archived.length})`,
+                        fields: [
+                            { name: '🆔 Archive ID', value: `${arch.id}`, inline: true },
+                            { name: '👤 Player', value: `<@${arch.user_id}>`, inline: true },
+                            { name: `${reasonEmoji} Reason`, value: reasonText, inline: true },
+                            { name: '📛 Username', value: arch.username, inline: true },
+                            { name: '📝 Code', value: `\`${codePreview}\``, inline: false },
+                            { name: '📅 Created', value: arch.created_at || 'N/A', inline: true },
+                            { name: '📦 Archived', value: arch.archived_at || 'N/A', inline: true }
+                        ],
+                        timestamp: new Date().toISOString()
+                    };
+
+                    if (arch.image_data) {
+                        const attachment = new AttachmentBuilder(
+                            Buffer.from(arch.image_data),
+                            { name: arch.image_filename || 'image.png' }
+                        );
+                        files.push(attachment);
+                        embed.image = { url: `attachment://${arch.image_filename || 'image.png'}` };
+                    }
+
+                    return { embed, files };
+                };
+
+                const generateArchiveButtons = (index) => {
+                    return [
+                        new ActionRowBuilder().addComponents(
+                            new ButtonBuilder()
+                                .setCustomId('arch_prev')
+                                .setLabel('◀️ Previous')
+                                .setStyle(ButtonStyle.Secondary)
+                                .setDisabled(index === 0),
+                            new ButtonBuilder()
+                                .setCustomId('arch_next')
+                                .setLabel('Next ▶️')
+                                .setStyle(ButtonStyle.Secondary)
+                                .setDisabled(index === archived.length - 1),
+                            new ButtonBuilder()
+                                .setCustomId('arch_restore')
+                                .setLabel('♻️ Restore')
+                                .setStyle(ButtonStyle.Success),
+                            new ButtonBuilder()
+                                .setCustomId('arch_close')
+                                .setLabel('❌ Close')
+                                .setStyle(ButtonStyle.Danger)
+                        )
+                    ];
+                };
+
+                const { embed: archEmbed, files: archFiles } = generateArchiveEmbed(archiveIndex);
+                const archiveReply = await i.reply({
+                    embeds: [archEmbed],
+                    files: archFiles,
+                    components: generateArchiveButtons(archiveIndex),
+                    ephemeral: true
+                });
+
+                const archCollector = archiveReply.createMessageComponentCollector({ time: 300000 });
+                
+                archCollector.on('collect', async (archI) => {
+                    if (archI.customId === 'arch_prev' && archiveIndex > 0) {
+                        archiveIndex--;
+                    } else if (archI.customId === 'arch_next' && archiveIndex < archived.length - 1) {
+                        archiveIndex++;
+                    } else if (archI.customId === 'arch_restore') {
+                        const archiveId = archived[archiveIndex].id;
+                        const result = restoreSubmission(archiveId);
+                        if (result) {
+                            submissions = getAllPendingSubmissions();
+                            await archI.update({
+                                content: `♻️ **Restored!** Submission from **${result.username}** has been restored with new ID: **${result.newId}**`,
+                                embeds: [],
+                                files: [],
+                                components: []
+                            });
+                            return;
+                        }
+                    } else if (archI.customId === 'arch_close') {
+                        await archI.update({
+                            content: '📦 Archive closed.',
+                            embeds: [],
+                            files: [],
+                            components: []
+                        });
+                        return;
+                    }
+
+                    const { embed: newArchEmbed, files: newArchFiles } = generateArchiveEmbed(archiveIndex);
+                    await archI.update({
+                        embeds: [newArchEmbed],
+                        files: newArchFiles,
+                        components: generateArchiveButtons(archiveIndex)
+                    });
+                });
+
                 return;
             }
 
