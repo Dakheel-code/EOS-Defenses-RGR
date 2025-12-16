@@ -625,14 +625,18 @@ module.exports = {
                 };
 
                 const { embed: archEmbed, files: archFiles } = generateArchiveEmbed(archiveIndex);
-                const archiveReply = await i.reply({
+                await i.reply({
                     embeds: [archEmbed],
                     files: archFiles,
                     components: generateArchiveButtons(archiveIndex),
-                    ephemeral: true
+                    ephemeral: true,
+                    fetchReply: true
                 });
 
-                const archCollector = archiveReply.createMessageComponentCollector({ time: 300000 });
+                const archCollector = i.channel.createMessageComponentCollector({ 
+                    filter: (btn) => btn.user.id === i.user.id && btn.customId.startsWith('arch_'),
+                    time: 300000 
+                });
                 
                 archCollector.on('collect', async (archI) => {
                     try {
