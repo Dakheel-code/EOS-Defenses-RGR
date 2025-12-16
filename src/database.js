@@ -207,6 +207,41 @@ function deleteFromArchive(archiveId) {
     return { changes: d.getRowsModified() };
 }
 
+// Get top contributors stats
+function getTopContributors(limit = 10) {
+    const d = getDb();
+    
+    // Count from both submissions (published) and archive (published reason)
+    const result = d.exec(`
+        SELECT user_id, username, COUNT(*) as total_submissions
+        FROM (
+            SELECT user_id, username FROM submissions
+            UNION ALL
+            SELECT user_id, username FROM archive WHERE archive_reason = 'published'
+        )
+        GROUP BY user_id
+        ORDER BY total_submissions DESC
+        LIMIT ?
+    `, [limit]);
+    
+    return resultToObjects(result);
+}
+
+// Get total stats
+function getTotalStats() {
+    const d = getDb();
+    
+    const pendingResult = d.exec('SELECT COUNT(*) as count FROM submissions WHERE published = 0');
+    const publishedResult = d.exec('SELECT COUNT(*) as count FROM archive WHERE archive_reason = ?', ['published']);
+    const deletedResult = d.exec('SELECT COUNT(*) as count FROM archive WHERE archive_reason = ?', ['deleted']);
+    
+    return {
+        pending: pendingResult[0]?.values[0][0] || 0,
+        published: publishedResult[0]?.values[0][0] || 0,
+        deleted: deletedResult[0]?.values[0][0] || 0
+    };
+}
+
 module.exports = {
     initDatabase,
     addSubmission,
@@ -218,5 +253,7 @@ module.exports = {
     markAsPublished,
     getArchivedSubmissions,
     restoreSubmission,
-    deleteFromArchive
+    deleteFromArchive,
+    getTopContributors,
+    getTotalStats
 };

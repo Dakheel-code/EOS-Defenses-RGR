@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits, AttachmentBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
-const { getAllPendingSubmissions, deleteSubmission, updateSubmission, updateSubmissionMessage, markAsPublished, getArchivedSubmissions, restoreSubmission, deleteFromArchive } = require('../database');
+const { getAllPendingSubmissions, deleteSubmission, updateSubmission, updateSubmissionMessage, markAsPublished, getArchivedSubmissions, restoreSubmission, deleteFromArchive, getTopContributors, getTotalStats } = require('../database');
 
 const getIntroMessage = (season) => `@everyone
 
@@ -130,6 +130,10 @@ module.exports = {
                 new ButtonBuilder()
                     .setCustomId('view_archive')
                     .setLabel('📦 Archive')
+                    .setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder()
+                    .setCustomId('view_stats')
+                    .setLabel('📊 Stats')
                     .setStyle(ButtonStyle.Secondary)
             );
 
@@ -710,6 +714,41 @@ module.exports = {
                     }
                 });
 
+                return;
+            }
+
+            // View Stats
+            if (i.customId === 'view_stats') {
+                const topContributors = getTopContributors(10);
+                const totalStats = getTotalStats();
+                
+                let leaderboard = '';
+                const medals = ['🥇', '🥈', '🥉'];
+                
+                topContributors.forEach((contributor, index) => {
+                    const medal = medals[index] || `**${index + 1}.**`;
+                    leaderboard += `${medal} <@${contributor.user_id}> - **${contributor.total_submissions}** submissions\n`;
+                });
+                
+                if (leaderboard === '') {
+                    leaderboard = 'No submissions yet.';
+                }
+                
+                const statsEmbed = {
+                    color: 0xffd700,
+                    title: '📊 Submission Statistics',
+                    fields: [
+                        { name: '📈 Overview', value: `📥 **Pending:** ${totalStats.pending}\n✅ **Published:** ${totalStats.published}\n🗑️ **Deleted:** ${totalStats.deleted}\n📊 **Total:** ${totalStats.pending + totalStats.published + totalStats.deleted}`, inline: false },
+                        { name: '🏆 Top Contributors', value: leaderboard, inline: false }
+                    ],
+                    timestamp: new Date().toISOString(),
+                    footer: { text: 'Keep contributing! 💪' }
+                };
+                
+                await i.reply({
+                    embeds: [statsEmbed],
+                    ephemeral: true
+                });
                 return;
             }
 
