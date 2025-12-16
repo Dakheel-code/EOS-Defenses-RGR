@@ -152,6 +152,31 @@ client.on('messageCreate', async (message) => {
 
         await message.reply(`✅ **Submission received!** #${result.lastInsertRowid}\n\n🙏 Thank you for sharing your defense! Your contribution helps the team! 💪\n\n📝 Code: \`${content.substring(0, 50)}${content.length > 50 ? '...' : ''}\`\n🖼️ Image: ✅`);
 
+        // Send admin notification
+        if (process.env.ADMIN_CHANNEL_ID) {
+            try {
+                const adminChannel = client.channels.cache.get(process.env.ADMIN_CHANNEL_ID);
+                if (adminChannel) {
+                    const notificationEmbed = {
+                        color: 0x00ff00,
+                        title: '📥 New Submission Received!',
+                        fields: [
+                            { name: '🆔 ID', value: `${result.lastInsertRowid}`, inline: true },
+                            { name: '👤 Player', value: `<@${message.author.id}>`, inline: true },
+                            { name: '📛 Username', value: message.author.username, inline: true },
+                            { name: '📝 Code Preview', value: `\`${content.substring(0, 100)}${content.length > 100 ? '...' : ''}\``, inline: false }
+                        ],
+                        thumbnail: { url: attachment.url },
+                        timestamp: new Date().toISOString(),
+                        footer: { text: 'Use /list to manage submissions' }
+                    };
+                    await adminChannel.send({ embeds: [notificationEmbed] });
+                }
+            } catch (notifError) {
+                console.error('Error sending admin notification:', notifError);
+            }
+        }
+
     } catch (error) {
         console.error('Error saving submission:', error);
         await message.reply('❌ Error saving your submission!');
