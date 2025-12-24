@@ -3,12 +3,20 @@ const fs = require('fs');
 const path = require('path');
 const { Client, Collection, GatewayIntentBits, REST, Routes, PartialUser, Partials, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const Scheduler = require('./scheduler');
-const { initDatabase, addSubmission, addOpponentDefense } = require('./database');
+const { initDatabase, addSubmission, addOpponentDefense, getAllPendingOpponentDefenses } = require('./database');
 const https = require('https');
 const http = require('http');
 
 // User sessions for conversation flow
 const userSessions = new Map();
+
+function isImageAttachment(att) {
+    const ct = att?.contentType;
+    if (typeof ct === 'string' && ct.toLowerCase().startsWith('image/')) return true;
+    if (typeof att?.height === 'number' && typeof att?.width === 'number') return true;
+    const nameOrUrl = `${att?.name || ''} ${att?.url || ''}`.toLowerCase();
+    return /\.(png|jpe?g|webp|gif|bmp|tiff?|heic|heif)(\?|$)/.test(nameOrUrl);
+}
 
 const client = new Client({
     intents: [
@@ -130,35 +138,36 @@ client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
     if (message.guild) return; // Only DMs
 
-    const userId = message.author.id;
-    let session = userSessions.get(userId);
+    try {
+        const userId = message.author.id;
+        let session = userSessions.get(userId);
 
-    // If user has no session or sends any message without active session, show service selection
-    if (!session) {
-        // Clear any potential old session
-        userSessions.delete(userId);
-        
-        const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId('service_opponents')
-                .setLabel('⚔️ EOS Opponents Defenses')
-                .setStyle(ButtonStyle.Primary),
-            new ButtonBuilder()
-                .setCustomId('service_defenses')
-                .setLabel('🛡️ EOS Defenses')
-                .setStyle(ButtonStyle.Success)
-        );
+        // If user has no session or sends any message without active session, show service selection
+        if (!session) {
+            // Clear any potential old session
+            userSessions.delete(userId);
+            
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId('service_opponents')
+                    .setLabel('⚔️ EOS Opponents Defenses')
+                    .setStyle(ButtonStyle.Primary),
+                new ButtonBuilder()
+                    .setCustomId('service_defenses')
+                    .setLabel('🛡️ EOS Defenses')
+                    .setStyle(ButtonStyle.Success)
+            );
 
-        await message.reply({
-            content: '👋 **Welcome!**\n\nPlease select a service:',
-            components: [row]
-        });
-        return;
-    }
+            await message.reply({
+                content: '👋 **Welcome!**\n\nPlease select a service:',
+                components: [row]
+            });
+            return;
+        }
 
     // If uploading opponent images (multiple, no code)
     if (session.step === 'upload_opponents') {
-        const attachments = message.attachments.filter(att => att.contentType?.startsWith('image/'));
+        const attachments = message.attachments.filter(att => isImageAttachment(att));
         
         const doneRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
@@ -186,7 +195,7 @@ client.on('messageCreate', async (message) => {
                     message.author.id,
                     message.author.username,
                     imageData,
-                    attachment.name
+                    attachment.name || 'image.png'
                 );
                 savedCount++;
             } catch (err) {
@@ -194,10 +203,17 @@ client.on('messageCreate', async (message) => {
             }
         }
 
-        // Get total count from database
-        const { getAllPendingOpponentDefenses } = require('./database');
         const allPending = getAllPendingOpponentDefenses();
-        const totalCount = allPending.filter(def => def.user_id === userId).length;
+        let userImages = allPending.filter(def => def.user_id === userId);
+        if (typeof session.startedAt === 'number') {
+            userImages = userImages.filter(def => {
+                const raw = String(def.created_at || '');
+                const iso = raw.includes('T') ? raw : raw.replace(' ', 'T');
+                const created = new Date(`${iso}Z`).getTime();
+                return Number.isFinite(created) ? created >= session.startedAt : true;
+            });
+        }
+        const totalCount = userImages.length;
 
         await message.reply({
             content: `✅ **${savedCount} image(s) received!** (Total: ${totalCount})\n\n📸 Send more images or click **Done** when finished.`,
@@ -211,7 +227,7 @@ client.on('messageCreate', async (message) => {
         const content = message.content?.trim();
         const attachment = message.attachments.first();
 
-        if (!attachment || !attachment.contentType?.startsWith('image/')) {
+        if (!attachment || !isImageAttachment(attachment)) {
             return message.reply('❌ Please send an **image** with your **code**!\n\n📝 **How to submit:**\n1. Attach your defense screenshot\n2. Write your code in the message text\n3. Send both together!');
         }
 
@@ -227,7 +243,7 @@ client.on('messageCreate', async (message) => {
                 message.author.username,
                 content,
                 imageData,
-                attachment.name,
+                attachment.name || 'image.png',
                 session.service // Pass service type
             );
 
@@ -284,6 +300,12 @@ client.on('messageCreate', async (message) => {
             await message.reply('❌ Error saving your submission!');
         }
     }
+    } catch (err) {
+        console.error('Error in DM messageCreate handler:', err);
+        try {
+            await message.reply('❌ حدث خطأ غير متوقع. حاول مرة أخرى.');
+        } catch (_) {}
+    }
 });
 
 // Handle button interactions for DM service selection
@@ -293,8 +315,9 @@ client.on('interactionCreate', async (interaction) => {
 
     const userId = interaction.user.id;
 
-    if (interaction.customId === 'service_opponents') {
-        userSessions.set(userId, { step: 'upload_opponents', service: 'opponents', imageCount: 0 });
+    try {
+        if (interaction.customId === 'service_opponents') {
+            userSessions.set(userId, { step: 'upload_opponents', service: 'opponents', imageCount: 0, startedAt: Date.now() });
         
         const doneRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
@@ -326,27 +349,37 @@ client.on('interactionCreate', async (interaction) => {
             components: [cancelRow]
         });
     } else if (interaction.customId === 'done_opponents') {
-        const { getAllPendingOpponentDefenses } = require('./database');
+        await interaction.deferUpdate();
         
         // Get actual count from database for this user
+        const session = userSessions.get(userId);
         const allPending = getAllPendingOpponentDefenses();
-        const userImages = allPending.filter(def => def.user_id === userId);
+        let userImages = allPending.filter(def => def.user_id === userId);
+        if (typeof session?.startedAt === 'number') {
+            userImages = userImages.filter(def => {
+                const raw = String(def.created_at || '');
+                const iso = raw.includes('T') ? raw : raw.replace(' ', 'T');
+                const created = new Date(`${iso}Z`).getTime();
+                return Number.isFinite(created) ? created >= session.startedAt : true;
+            });
+        }
         const count = userImages.length;
         
         userSessions.delete(userId);
         
         if (count === 0) {
-            await interaction.update({
+            await interaction.message.edit({
                 content: '❌ **No images uploaded!**\n\nYou need to send at least one image.',
                 components: []
             });
         } else {
-            await interaction.update({
+            await interaction.message.edit({
                 content: `✅ **Upload Complete!**\n\n📊 Total images uploaded: **${count}**\n\n🙏 Thank you! An admin will review your submissions soon.`,
                 components: []
             });
         }
     } else if (interaction.customId === 'cancel_submission') {
+        await interaction.deferUpdate();
         userSessions.delete(userId);
         
         const row = new ActionRowBuilder().addComponents(
@@ -360,10 +393,18 @@ client.on('interactionCreate', async (interaction) => {
                 .setStyle(ButtonStyle.Success)
         );
 
-        await interaction.update({
+        await interaction.message.edit({
             content: '❌ **Cancelled!**\n\n👋 **Welcome!**\n\nPlease select a service:',
             components: [row]
         });
+    }
+    } catch (err) {
+        console.error('Error in DM button interaction handler:', err);
+        try {
+            if (!interaction.deferred && !interaction.replied) {
+                await interaction.reply({ content: '❌ حدث خطأ. حاول مرة أخرى.', ephemeral: true });
+            }
+        } catch (_) {}
     }
 });
 
