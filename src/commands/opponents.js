@@ -343,7 +343,7 @@ module.exports = {
                         
                         // Send closing message
                         await channel.send('──────────────────────');
-                        const closingMessage = `Due to the small amount of interesting defenses I had to pick from, we will most probably do less than the usual 10 top voted solutions.\n\n**Please keep in mind to make some screenshots of the final day opponents defenses or record your arena run and screenshot the defenses from there afterwards.**\n\n**Starts here**: ⁠🧱-eos-opponents-defenses`;
+                        const closingMessage = `Due to the small amount of interesting defenses I had to pick from, we will most probably do less than the usual 10 top voted solutions.\n\n**Please keep in mind to make some screenshots of the final day opponents defenses or record your arena run and screenshot the defenses from there afterwards.**\n\n**Starts here: ⁠🧱-eos-opponents-defenses**`;
                         await channel.send(closingMessage);
                         
                         approvedDefenses = getAllApprovedOpponentDefenses();
