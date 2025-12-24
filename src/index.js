@@ -208,16 +208,45 @@ client.on('messageCreate', async (message) => {
         }
 
         let savedCount = 0;
+        const { AttachmentBuilder } = require('discord.js');
         for (const [, attachment] of attachments) {
             try {
                 const imageData = await downloadImage(attachment.url);
-                db.addOpponentDefense(
+                const result = db.addOpponentDefense(
                     message.author.id,
                     message.author.username,
                     imageData,
                     attachment.name || 'image.png'
                 );
                 savedCount++;
+
+                // Send immediate admin notification for this image
+                if (process.env.ADMIN_CHANNEL_ID) {
+                    try {
+                        const adminChannel = client.channels.cache.get(process.env.ADMIN_CHANNEL_ID);
+                        if (adminChannel) {
+                            const imageAttachment = new AttachmentBuilder(imageData, { name: attachment.name || 'image.png' });
+                            const notificationEmbed = {
+                                color: 0xff6600,
+                                title: '📥 New Opponent Defense Image',
+                                fields: [
+                                    { name: '🆔 ID', value: `${result.lastInsertRowid}`, inline: true },
+                                    { name: '👤 Player', value: `<@${message.author.id}>`, inline: true },
+                                    { name: '📛 Username', value: message.author.username, inline: true }
+                                ],
+                                image: { url: `attachment://${attachment.name || 'image.png'}` },
+                                timestamp: new Date().toISOString(),
+                                footer: { text: 'Use /opponents to review and approve' }
+                            };
+                            await adminChannel.send({ 
+                                embeds: [notificationEmbed],
+                                files: [imageAttachment]
+                            });
+                        }
+                    } catch (notifError) {
+                        console.error('Error sending admin notification for opponent image:', notifError);
+                    }
+                }
             } catch (err) {
                 console.error('Error saving opponent image:', err);
             }
@@ -355,7 +384,7 @@ client.on('interactionCreate', async (interaction) => {
         );
 
         await interaction.update({
-            content: '⚔️ **EOS Opponents Defenses**\n\n📸 أرسل **صور الدفاعات** (صور فقط، بدون كود)\n\n📌 يمكنك إرسال:\n- عدة صور في رسالة واحدة\n- أو صورة واحدة في كل رسالة\n\n✅ اضغط **Done** بعد الانتهاء من رفع جميع الصور.',
+            content: '⚔️ **EOS Opponents Defenses**\n\n📸 Send your defense **screenshots** (images only, no code needed)\n\n📌 You can send:\n- Multiple images in one message\n- Or one image per message\n\n✅ Click **Done** when you finish uploading all images.',
             components: [doneRow]
         });
     } else if (interaction.customId === 'service_defenses') {
