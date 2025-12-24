@@ -194,11 +194,13 @@ client.on('messageCreate', async (message) => {
             }
         }
 
-        session.imageCount = (session.imageCount || 0) + savedCount;
-        userSessions.set(userId, session);
+        // Get total count from database
+        const { getAllPendingOpponentDefenses } = require('./database');
+        const allPending = getAllPendingOpponentDefenses();
+        const totalCount = allPending.filter(def => def.user_id === userId).length;
 
         await message.reply({
-            content: `✅ **${savedCount} image(s) received!** (Total: ${session.imageCount})\n\n📸 Send more images or click **Done** when finished.`,
+            content: `✅ **${savedCount} image(s) received!** (Total: ${totalCount})\n\n📸 Send more images or click **Done** when finished.`,
             components: [doneRow]
         });
         return;
@@ -324,8 +326,13 @@ client.on('interactionCreate', async (interaction) => {
             components: [cancelRow]
         });
     } else if (interaction.customId === 'done_opponents') {
-        const session = userSessions.get(userId);
-        const count = session?.imageCount || 0;
+        const { getAllPendingOpponentDefenses } = require('./database');
+        
+        // Get actual count from database for this user
+        const allPending = getAllPendingOpponentDefenses();
+        const userImages = allPending.filter(def => def.user_id === userId);
+        const count = userImages.length;
+        
         userSessions.delete(userId);
         
         if (count === 0) {
