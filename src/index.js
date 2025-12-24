@@ -160,8 +160,22 @@ client.on('messageCreate', async (message) => {
     if (session.step === 'upload_opponents') {
         const attachments = message.attachments.filter(att => att.contentType?.startsWith('image/'));
         
+        const doneRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId('done_opponents')
+                .setLabel('✅ Done - Finish Uploading')
+                .setStyle(ButtonStyle.Success),
+            new ButtonBuilder()
+                .setCustomId('cancel_submission')
+                .setLabel('❌ Cancel')
+                .setStyle(ButtonStyle.Danger)
+        );
+        
         if (attachments.size === 0) {
-            return message.reply('❌ Please send **images** only! No text needed for Opponents Defenses.');
+            return message.reply({
+                content: '❌ Please send **images** only! No text needed for Opponents Defenses.',
+                components: [doneRow]
+            });
         }
 
         let savedCount = 0;
@@ -183,7 +197,10 @@ client.on('messageCreate', async (message) => {
         session.imageCount = (session.imageCount || 0) + savedCount;
         userSessions.set(userId, session);
 
-        await message.reply(`✅ **${savedCount} image(s) received!** (Total: ${session.imageCount})\n\n📸 Send more images or click **Done** when finished.`);
+        await message.reply({
+            content: `✅ **${savedCount} image(s) received!** (Total: ${session.imageCount})\n\n📸 Send more images or click **Done** when finished.`,
+            components: [doneRow]
+        });
         return;
     }
 
