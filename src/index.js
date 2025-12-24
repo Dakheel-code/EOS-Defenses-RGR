@@ -187,7 +187,9 @@ client.on('messageCreate', async (message) => {
 
     // If uploading opponent images (multiple, no code)
     if (session.step === 'upload_opponents') {
+        console.log(`[OPPONENT UPLOAD] User ${userId} sent message with ${message.attachments.size} attachments`);
         const attachments = message.attachments.filter(att => isImageAttachment(att));
+        console.log(`[OPPONENT UPLOAD] Filtered to ${attachments.size} image attachments`);
         
         const doneRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
@@ -201,6 +203,7 @@ client.on('messageCreate', async (message) => {
         );
         
         if (attachments.size === 0) {
+            console.log(`[OPPONENT UPLOAD] No valid images detected, sending error`);
             return message.reply({
                 content: '❌ Please send **images** only! No text needed for Opponents Defenses.',
                 components: [doneRow]
@@ -210,14 +213,19 @@ client.on('messageCreate', async (message) => {
         let savedCount = 0;
         const { AttachmentBuilder } = require('discord.js');
         for (const [, attachment] of attachments) {
+            console.log(`[OPPONENT UPLOAD] Processing attachment: ${attachment.name}, url: ${attachment.url}`);
             try {
+                console.log(`[OPPONENT UPLOAD] Downloading image...`);
                 const imageData = await downloadImage(attachment.url);
+                console.log(`[OPPONENT UPLOAD] Downloaded ${imageData.length} bytes`);
+                console.log(`[OPPONENT UPLOAD] Saving to database...`);
                 const result = db.addOpponentDefense(
                     message.author.id,
                     message.author.username,
                     imageData,
                     attachment.name || 'image.png'
                 );
+                console.log(`[OPPONENT UPLOAD] Saved with ID: ${result.lastInsertRowid}`);
                 savedCount++;
 
                 // Send immediate admin notification for this image
@@ -248,14 +256,19 @@ client.on('messageCreate', async (message) => {
                     }
                 }
             } catch (err) {
-                console.error('Error saving opponent image:', err);
+                console.error(`[OPPONENT UPLOAD] Error saving opponent image:`, err);
+                console.error(`[OPPONENT UPLOAD] Error stack:`, err.stack);
             }
         }
+        console.log(`[OPPONENT UPLOAD] Total saved: ${savedCount}`);
 
+        console.log(`[OPPONENT UPLOAD] Fetching pending defenses for count...`);
         const allPending = (typeof db.getAllPendingOpponentDefenses === 'function')
             ? db.getAllPendingOpponentDefenses()
             : [];
+        console.log(`[OPPONENT UPLOAD] Total pending in DB: ${allPending.length}`);
         let userImages = allPending.filter(def => def.user_id === userId);
+        console.log(`[OPPONENT UPLOAD] User images before filter: ${userImages.length}`);
         if (typeof session.startedAt === 'number') {
             userImages = userImages.filter(def => {
                 const raw = String(def.created_at || '');
@@ -265,6 +278,7 @@ client.on('messageCreate', async (message) => {
             });
         }
         const totalCount = userImages.length;
+        console.log(`[OPPONENT UPLOAD] Final count - saved: ${savedCount}, total: ${totalCount}`);
 
         await message.reply({
             content: `✅ **${savedCount} image(s) received!** (Total: ${totalCount})\n\n📸 Send more images or click **Done** when finished.`,
