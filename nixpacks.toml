@@ -1,8 +1,8 @@
 [phases.setup]
-nixPkgs = ["nodejs_20", "python3", "gcc", "g++", "make", "vips"]
+nixPkgs = ["nodejs_20", "python3", "gcc", "gnumake", "vips"]
 
 [phases.install]
-cmds = ["npm ci"]
+cmds = ["npm install"]
 
 [start]
 cmd = "npm start"
