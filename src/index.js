@@ -10,6 +10,24 @@ const http = require('http');
 // User sessions for conversation flow
 const userSessions = new Map();
 
+let dbReady = false;
+let dbInitPromise = null;
+
+async function ensureDatabaseReady() {
+    if (dbReady) return;
+    if (!dbInitPromise) {
+        dbInitPromise = initDatabase()
+            .then(() => {
+                dbReady = true;
+            })
+            .catch((err) => {
+                dbInitPromise = null;
+                throw err;
+            });
+    }
+    await dbInitPromise;
+}
+
 function isImageAttachment(att) {
     const ct = att?.contentType;
     if (typeof ct === 'string' && ct.toLowerCase().startsWith('image/')) return true;
@@ -101,7 +119,7 @@ async function downloadImage(url) {
 client.once('ready', async () => {
     console.log(`Logged in as ${client.user.tag}!`);
     
-    await initDatabase();
+    await ensureDatabaseReady();
     console.log('Database initialized!');
     
     client.scheduler = new Scheduler(client);
@@ -164,6 +182,8 @@ client.on('messageCreate', async (message) => {
             });
             return;
         }
+
+        await ensureDatabaseReady();
 
     // If uploading opponent images (multiple, no code)
     if (session.step === 'upload_opponents') {
@@ -303,7 +323,8 @@ client.on('messageCreate', async (message) => {
     } catch (err) {
         console.error('Error in DM messageCreate handler:', err);
         try {
-            await message.reply('❌ حدث خطأ غير متوقع. حاول مرة أخرى.');
+            const msg = (err && err.message) ? err.message : 'unknown error';
+            await message.reply(`❌ حدث خطأ غير متوقع. حاول مرة أخرى.\n(${msg})`);
         } catch (_) {}
     }
 });
@@ -316,6 +337,7 @@ client.on('interactionCreate', async (interaction) => {
     const userId = interaction.user.id;
 
     try {
+        await ensureDatabaseReady();
         if (interaction.customId === 'service_opponents') {
             userSessions.set(userId, { step: 'upload_opponents', service: 'opponents', imageCount: 0, startedAt: Date.now() });
         
@@ -402,7 +424,8 @@ client.on('interactionCreate', async (interaction) => {
         console.error('Error in DM button interaction handler:', err);
         try {
             if (!interaction.deferred && !interaction.replied) {
-                await interaction.reply({ content: '❌ حدث خطأ. حاول مرة أخرى.', ephemeral: true });
+                const msg = (err && err.message) ? err.message : 'unknown error';
+                await interaction.reply({ content: `❌ حدث خطأ. حاول مرة أخرى.\n(${msg})`, ephemeral: true });
             }
         } catch (_) {}
     }
