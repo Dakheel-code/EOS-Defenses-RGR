@@ -282,7 +282,7 @@ module.exports = {
 
                     const seasonInput = new TextInputBuilder()
                         .setCustomId('season_number')
-                        .setLabel('Season Number (رقم الموسم)')
+                        .setLabel('Season Number')
                         .setStyle(TextInputStyle.Short)
                         .setPlaceholder('157')
                         .setRequired(true);

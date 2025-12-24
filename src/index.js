@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { Client, Collection, GatewayIntentBits, REST, Routes, PartialUser, Partials, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const Scheduler = require('./scheduler');
-const { initDatabase, addSubmission, addOpponentDefense, getAllPendingOpponentDefenses } = require('./database');
+const db = require('./database');
 const https = require('https');
 const http = require('http');
 
@@ -16,7 +16,7 @@ let dbInitPromise = null;
 async function ensureDatabaseReady() {
     if (dbReady) return;
     if (!dbInitPromise) {
-        dbInitPromise = initDatabase()
+        dbInitPromise = db.initDatabase()
             .then(() => {
                 dbReady = true;
             })
@@ -211,7 +211,7 @@ client.on('messageCreate', async (message) => {
         for (const [, attachment] of attachments) {
             try {
                 const imageData = await downloadImage(attachment.url);
-                addOpponentDefense(
+                db.addOpponentDefense(
                     message.author.id,
                     message.author.username,
                     imageData,
@@ -223,7 +223,9 @@ client.on('messageCreate', async (message) => {
             }
         }
 
-        const allPending = getAllPendingOpponentDefenses();
+        const allPending = (typeof db.getAllPendingOpponentDefenses === 'function')
+            ? db.getAllPendingOpponentDefenses()
+            : [];
         let userImages = allPending.filter(def => def.user_id === userId);
         if (typeof session.startedAt === 'number') {
             userImages = userImages.filter(def => {
@@ -258,7 +260,7 @@ client.on('messageCreate', async (message) => {
         try {
             const imageData = await downloadImage(attachment.url);
             
-            const result = addSubmission(
+            const result = db.addSubmission(
                 message.author.id,
                 message.author.username,
                 content,
@@ -324,7 +326,7 @@ client.on('messageCreate', async (message) => {
         console.error('Error in DM messageCreate handler:', err);
         try {
             const msg = (err && err.message) ? err.message : 'unknown error';
-            await message.reply(`❌ حدث خطأ غير متوقع. حاول مرة أخرى.\n(${msg})`);
+            await message.reply(`❌ An unexpected error occurred. Please try again.\n(${msg})`);
         } catch (_) {}
     }
 });
@@ -375,7 +377,9 @@ client.on('interactionCreate', async (interaction) => {
         
         // Get actual count from database for this user
         const session = userSessions.get(userId);
-        const allPending = getAllPendingOpponentDefenses();
+        const allPending = (typeof db.getAllPendingOpponentDefenses === 'function')
+            ? db.getAllPendingOpponentDefenses()
+            : [];
         let userImages = allPending.filter(def => def.user_id === userId);
         if (typeof session?.startedAt === 'number') {
             userImages = userImages.filter(def => {
@@ -425,7 +429,7 @@ client.on('interactionCreate', async (interaction) => {
         try {
             if (!interaction.deferred && !interaction.replied) {
                 const msg = (err && err.message) ? err.message : 'unknown error';
-                await interaction.reply({ content: `❌ حدث خطأ. حاول مرة أخرى.\n(${msg})`, ephemeral: true });
+                await interaction.reply({ content: `❌ An error occurred. Please try again.\n(${msg})`, ephemeral: true });
             }
         } catch (_) {}
     }
