@@ -355,7 +355,7 @@ client.on('interactionCreate', async (interaction) => {
         );
 
         await interaction.update({
-            content: '⚔️ **EOS Opponents Defenses**\n\n📸 Send your defense **screenshots** (images only, no code needed)\n\n📌 You can send:\n- Multiple images in one message\n- Or one image per message\n\n✅ Click **Done** when you finish uploading all images.',
+            content: '⚔️ **EOS Opponents Defenses**\n\n📸 أرسل **صور الدفاعات** (صور فقط، بدون كود)\n\n📌 يمكنك إرسال:\n- عدة صور في رسالة واحدة\n- أو صورة واحدة في كل رسالة\n\n✅ اضغط **Done** بعد الانتهاء من رفع جميع الصور.',
             components: [doneRow]
         });
     } else if (interaction.customId === 'service_defenses') {
