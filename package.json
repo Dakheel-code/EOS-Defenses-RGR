@@ -4,17 +4,19 @@
   "description": "Discord bot for collecting and publishing player codes",
   "main": "src/index.js",
   "engines": {
-    "node": ">=18.0.0"
+    "node": "20.x"
   },
   "scripts": {
     "start": "node src/index.js",
-    "dev": "nodemon src/index.js"
+    "dev": "nodemon src/index.js",
+    "postinstall": "npm rebuild sharp"
   },
   "dependencies": {
     "discord.js": "^14.14.1",
-    "sql.js": "^1.10.2",
+    "dotenv": "^16.3.1",
     "node-cron": "^3.0.3",
-    "dotenv": "^16.3.1"
+    "sharp": "^0.33.5",
+    "sql.js": "^1.10.2"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"
